@@ -398,7 +398,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--ink);color:var(--fog);min
   <div class="mid-wrap">
     <div class="card">
       <div class="card-title">Sign in</div>
-      <div class="card-sub" id="login-sub">Enter your work email to access your tenders and tasks.</div>
+      <div class="card-sub" id="login-sub">Enter your email and password to sign in. First time? Leave the password blank and you will be prompted to create one.</div>
       <div class="field"><label>Email address</label><input type="email" id="li-email" placeholder="your.name@ncc.nsw.gov.au" autocomplete="email" /></div>
       <div class="field"><label>Password</label><input type="password" id="li-password" placeholder="Your password" autocomplete="current-password" /></div>
       <button class="btn" id="btn-login">Sign in</button>
@@ -749,7 +749,6 @@ function doLogin() {
   var email = g('li-email').value.trim().toLowerCase();
   var pw    = g('li-password').value;
   if (!email || email.indexOf('@') === -1) { setMsg('login-msg','err','Please enter a valid email address.'); return; }
-  if (!pw) { setMsg('login-msg','err','Please enter your password.'); return; }
   if (!scriptUrl) { setMsg('login-msg','err','Google Sheets not connected - ask your admin.'); return; }
   setMsg('login-msg','info','Signing in...');
   g('btn-login').disabled = true;
@@ -757,15 +756,19 @@ function doLogin() {
     g('btn-login').disabled = false;
     if (err || !d || !d.ok) { setMsg('login-msg','err',(d && d.error) || 'Sign in failed.'); return; }
     var user = d.user;
-    if (!user.password) {
+    // No password set yet - treat as unset if blank or not a valid 64-char SHA-256 hash
+    var hasValidPassword = user.password && /^[0-9a-f]{64}$/.test(user.password.trim());
+    if (!hasValidPassword) {
       lsw('cn-pending-user', JSON.stringify(user));
       g('login-msg').className = 'msg';
       g('user-pw-modal').classList.add('show');
       setTimeout(function(){ g('new-pw-input').focus(); }, 100);
       return;
     }
+    // Password is set - require it to be entered
+    if (!pw) { setMsg('login-msg','err','Please enter your password.'); return; }
     sha256(pw).then(function(hash) {
-      if (hash !== user.password) {
+      if (hash !== user.password.trim()) {
         setMsg('login-msg','err','Incorrect password. Please try again.');
         g('li-password').value = '';
         return;

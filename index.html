@@ -118,7 +118,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--ink);color:var(--fog);min
 
 /* STATS */
 .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.75rem;margin-bottom:1.5rem;}
-.stat{background:var(--ink2);border:1px solid var(--border);border-radius:var(--r);padding:1rem;}
+.stat{background:var(--ink2);border:1px solid var(--border);border-radius:var(--r);padding:1rem;cursor:pointer;transition:all .2s;user-select:none;}
+.stat:hover{border-color:var(--border2);background:var(--ink3);}
+.stat.active{border-color:var(--gold);background:var(--ink3);box-shadow:0 0 0 2px var(--glow);}
+.stat.active .stat-lbl{color:var(--gold);}
+.view-label{font-size:11px;color:var(--slate);font-family:'DM Mono',monospace;margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem;}
+.view-label .lbl-tag{background:var(--ink3);border:1px solid var(--border2);color:var(--gold);font-size:10px;padding:2px 8px;border-radius:20px;font-family:'DM Mono',monospace;}
+.progress-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.75rem;margin-bottom:1.5rem;}
+.prog-card{background:var(--ink2);border:1px solid var(--border);border-radius:var(--r);padding:1rem 1.25rem;cursor:pointer;transition:all .2s;}
+.prog-card:hover{border-color:var(--border2);background:var(--ink3);}
+.prog-card-name{font-size:13px;color:var(--white);margin-bottom:.5rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.prog-card-meta{font-size:10px;color:var(--slate);font-family:'DM Mono',monospace;margin-bottom:.75rem;}
+.prog-bar-wrap{display:flex;align-items:center;gap:.75rem;}
+.prog-bar-bg{flex:1;height:6px;background:var(--ink4);border-radius:3px;}
+.prog-bar-fill{height:100%;border-radius:3px;transition:width .5s;}
+.prog-pct{font-family:'DM Serif Display',serif;font-size:18px;color:var(--gold);line-height:1;min-width:38px;text-align:right;}
+.prog-steps{font-size:10px;color:var(--slate);font-family:'DM Mono',monospace;margin-top:3px;text-align:right;}
 .stat-val{font-family:'DM Serif Display',serif;font-size:28px;color:var(--white);line-height:1;}
 .stat-val.gold{color:var(--gold);}
 .stat-val.ok{color:var(--ok);}
@@ -818,7 +833,7 @@ function renderTasks() {
 
 function buildTasksView(tenders) {
   var myRole = currentUser.role;
-  var pending = [], totalDone = 0, totalAll = 0;
+  var pending = [], completed = [], totalDone = 0, totalAll = 0;
 
   tenders.forEach(function(t) {
     var wf = t._wf || buildWF(t);
@@ -831,58 +846,136 @@ function buildTasksView(tenders) {
         var track = wf[si][ti];
         if (!currentUser.admin && track.role !== myRole) continue;
         track.steps.forEach(function(step) {
-          if (!prog[step.id]) pending.push({ t: t, step: step, role: track.role, stage: si });
+          if (!prog[step.id]) {
+            pending.push({ t: t, step: step, role: track.role, stage: si });
+          } else {
+            completed.push({ t: t, step: step, role: track.role, stage: si, info: prog[step.id] });
+          }
         });
       }
     }
   });
   pending.sort(function(a, b) { return a.stage - b.stage; });
+  completed.sort(function(a, b) {
+    var da = a.info && a.info.completedDate ? new Date(a.info.completedDate) : new Date(0);
+    var db = b.info && b.info.completedDate ? new Date(b.info.completedDate) : new Date(0);
+    return db - da;
+  });
+
+  // Store globally for view switching
+  dashTenders   = tenders;
+  dashPending   = pending;
+  dashCompleted = completed;
 
   var pct = totalAll ? Math.round(totalDone / totalAll * 100) : 0;
-  g('st-tenders').textContent = tenders.length;
-  g('st-pending').textContent = pending.length;
-  g('st-done').textContent    = totalDone;
-  g('st-pct').textContent     = pct + '%';
 
+  // Rebuild stat cards with active state
+  g('tasks-stats').innerHTML =
+    '<div class="stat' + (dashView==='tenders'   ? ' active' : '') + '" data-dash="tenders"><div class="stat-val gold">' + tenders.length + '</div><div class="stat-lbl">My Tenders</div></div>' +
+    '<div class="stat' + (dashView==='pending'   ? ' active' : '') + '" data-dash="pending"><div class="stat-val warn">' + pending.length + '</div><div class="stat-lbl">Pending Tasks</div></div>' +
+    '<div class="stat' + (dashView==='completed' ? ' active' : '') + '" data-dash="completed"><div class="stat-val ok">' + totalDone + '</div><div class="stat-lbl">Steps Complete</div></div>' +
+    '<div class="stat' + (dashView==='progress'  ? ' active' : '') + '" data-dash="progress"><div class="stat-val" style="color:var(--fog);">' + pct + '%</div><div class="stat-lbl">Overall Progress</div></div>';
+
+  renderDashView();
+}
+
+// Dashboard view state
+var dashView = 'tenders';
+var dashTenders = [], dashPending = [], dashCompleted = [];
+
+function renderDashView() {
   var html = '';
-  html += '<div class="sec">Pending tasks</div>';
-  if (!pending.length) {
-    html += '<div style="background:var(--ok-bg);border:1px solid rgba(45,170,110,.3);border-radius:var(--r);padding:1.25rem;text-align:center;margin-bottom:1.5rem;"><div style="font-family:\'DM Serif Display\',serif;font-size:18px;color:var(--ok);margin-bottom:.25rem;">All caught up!</div><div style="font-size:12px;color:var(--slate);">No pending tasks across your tenders.</div></div>';
-  } else {
-    html += '<div class="task-list">';
-    pending.slice(0, 30).forEach(function(pt) {
-      var urgency = '';
-      if (pt.t.close_date) {
-        var diff = Math.round((new Date(pt.t.close_date) - new Date()) / 86400000);
-        if (diff < 0) urgency = 'urgent';
-        else if (diff <= 7) urgency = 'soon';
-      }
-      html += '<div class="task-item ' + urgency + '">' +
-        '<div class="task-chk" data-sid="' + pt.step.id + '" data-tid="' + pt.t.id + '"></div>' +
-        '<div class="task-body">' +
-        '<div class="task-tender">' + esc(pt.t.name) + '</div>' +
-        '<div class="task-title">' + esc(pt.step.title) + '</div>' +
-        '<div class="task-meta">' + esc(pt.role) + ' - ' + STAGES[pt.stage] + (pt.step.time ? ' - ' + pt.step.time : '') + '</div>' +
-        '</div>' +
-        '<button class="task-open" data-open="' + pt.t.id + '">Open</button>' +
-        '</div>';
+
+  if (dashView === 'tenders') {
+    html += '<div class="view-label">My Tenders <span class="lbl-tag">' + dashTenders.length + '</span></div>';
+    if (!dashTenders.length) {
+      html += '<div class="empty-state"><div class="es-icon">&#128203;</div><div class="es-title">No tenders assigned</div><div class="es-sub">Your administrator has not assigned any tenders to you yet.</div></div>';
+    } else {
+      html += '<div class="tender-grid">';
+      dashTenders.forEach(function(t) {
+        var wf = t._wf || buildWF(t);
+        var prog = progressCache[t.id] || {};
+        var allS = allSteps(wf), dc = stepsDone(wf, prog);
+        var pct2 = allS.length ? Math.round(dc / allS.length * 100) : 0;
+        html += renderTenderCard(t, dc, allS.length, pct2);
+      });
+      html += '</div>';
+    }
+
+  } else if (dashView === 'pending') {
+    html += '<div class="view-label">Pending Tasks <span class="lbl-tag">' + dashPending.length + '</span></div>';
+    if (!dashPending.length) {
+      html += '<div style="background:var(--ok-bg);border:1px solid rgba(45,170,110,.3);border-radius:var(--r);padding:1.25rem;text-align:center;"><div style="font-family:DM Serif Display,serif;font-size:18px;color:var(--ok);margin-bottom:.25rem;">All caught up!</div><div style="font-size:12px;color:var(--slate);">No pending tasks across your tenders.</div></div>';
+    } else {
+      html += '<div class="task-list">';
+      dashPending.slice(0, 50).forEach(function(pt) {
+        var urgency = '';
+        if (pt.t.close_date) {
+          var diff = Math.round((new Date(pt.t.close_date) - new Date()) / 86400000);
+          if (diff < 0) urgency = 'urgent';
+          else if (diff <= 7) urgency = 'soon';
+        }
+        html += '<div class="task-item ' + urgency + '">' +
+          '<div class="task-chk" data-sid="' + pt.step.id + '" data-tid="' + pt.t.id + '"></div>' +
+          '<div class="task-body">' +
+          '<div class="task-tender">' + esc(pt.t.name) + '</div>' +
+          '<div class="task-title">' + esc(pt.step.title) + '</div>' +
+          '<div class="task-meta">' + esc(pt.role) + ' - ' + STAGES[pt.stage] + (pt.step.time ? ' - ' + pt.step.time : '') + '</div>' +
+          '</div>' +
+          '<button class="task-open" data-open="' + pt.t.id + '">Open</button>' +
+          '</div>';
+      });
+      if (dashPending.length > 50) html += '<div style="padding:.75rem 1rem;font-size:11px;color:var(--slate);font-family:'DM Mono',monospace;">+' + (dashPending.length - 50) + ' more - open individual tenders to see all.</div>';
+      html += '</div>';
+    }
+
+  } else if (dashView === 'completed') {
+    html += '<div class="view-label">Completed Steps <span class="lbl-tag">' + dashCompleted.length + '</span></div>';
+    if (!dashCompleted.length) {
+      html += '<div style="padding:2rem;text-align:center;color:var(--slate);font-size:13px;">No steps completed yet.</div>';
+    } else {
+      html += '<div class="task-list">';
+      dashCompleted.slice(0, 50).forEach(function(pt) {
+        var when = pt.info && pt.info.completedDate ? fmtDate(pt.info.completedDate) : '';
+        var who  = pt.info && pt.info.completedBy  ? pt.info.completedBy : '';
+        html += '<div class="task-item" style="opacity:.85;">' +
+          '<div class="task-chk done" style="background:var(--ok);border-color:var(--ok);color:var(--white);">v</div>' +
+          '<div class="task-body">' +
+          '<div class="task-tender">' + esc(pt.t.name) + '</div>' +
+          '<div class="task-title" style="text-decoration:line-through;color:var(--slate);">' + esc(pt.step.title) + '</div>' +
+          '<div class="task-meta">' + esc(pt.role) + ' - ' + STAGES[pt.stage] + '</div>' +
+          (when ? '<div class="task-meta" style="color:var(--ok);margin-top:2px;">Done ' + when + (who ? ' by ' + esc(who) : '') + '</div>' : '') +
+          '</div>' +
+          '<button class="task-open" data-open="' + pt.t.id + '">Open</button>' +
+          '</div>';
+      });
+      if (dashCompleted.length > 50) html += '<div style="padding:.75rem 1rem;font-size:11px;color:var(--slate);font-family:'DM Mono',monospace;">+' + (dashCompleted.length - 50) + ' more completed steps.</div>';
+      html += '</div>';
+    }
+
+  } else if (dashView === 'progress') {
+    html += '<div class="view-label">Overall Progress <span class="lbl-tag">' + dashTenders.length + ' tenders</span></div>';
+    html += '<div class="progress-grid">';
+    dashTenders.forEach(function(t) {
+      var wf = t._wf || buildWF(t);
+      var prog = progressCache[t.id] || {};
+      var allS = allSteps(wf), dc = stepsDone(wf, prog);
+      var pct = allS.length ? Math.round(dc / allS.length * 100) : 0;
+      var barCol = pct >= 100 ? 'var(--ok)' : pct >= 50 ? 'var(--gold)' : 'var(--info)';
+      html += '<div class="prog-card" data-tid="' + t.id + '">' +
+        '<div class="prog-card-name">' + esc(t.name) + '</div>' +
+        '<div class="prog-card-meta"><span class="stage-pip sp' + (t.stage||0) + '">' + STAGES[t.stage||0] + '</span>' + (t.ro ? '  ' + esc(t.ro) : '') + '</div>' +
+        '<div class="prog-bar-wrap" style="margin-top:.5rem;">' +
+        '<div class="prog-bar-bg"><div class="prog-bar-fill" style="width:' + pct + '%;background:' + barCol + '"></div></div>' +
+        '<div><div class="prog-pct">' + pct + '%</div><div class="prog-steps">' + dc + '/' + allS.length + '</div></div>' +
+        '</div></div>';
     });
-    if (pending.length > 30) html += '<div style="padding:.75rem 1rem;font-size:11px;color:var(--slate);font-family:\'DM Mono\',monospace;">+' + (pending.length - 30) + ' more tasks - open individual tenders to see all.</div>';
     html += '</div>';
   }
 
-  html += '<div class="sec" style="margin-top:1rem;">' + (currentUser.admin ? 'All tenders' : 'My tenders') + '</div>';
-  html += '<div class="tender-grid">';
-  tenders.forEach(function(t) {
-    var wf = t._wf || buildWF(t);
-    var prog = progressCache[t.id] || {};
-    var allS = allSteps(wf), dc = stepsDone(wf, prog);
-    var pct2 = allS.length ? Math.round(dc / allS.length * 100) : 0;
-    html += renderTenderCard(t, dc, allS.length, pct2);
-  });
-  html += '</div>';
   g('tasks-body').innerHTML = html;
 }
+
 
 function renderTenderCard(t, dc, total, pct) {
   return '<div class="t-card" data-tid="' + t.id + '">' +
@@ -1246,6 +1339,24 @@ function renderSidebar(t, wf, prog) {
 
 // ---- EVENTS -----------------------------------------------------------------
 document.addEventListener('click', function(e) {
+  // Stat card clicks - switch dashboard view
+  var statCard = e.target.closest('.stat[data-dash]');
+  if (statCard && statCard.dataset.dash) {
+    dashView = statCard.dataset.dash;
+    // Update active state on all cards
+    var allStats = document.querySelectorAll('.stat[data-dash]');
+    for (var si = 0; si < allStats.length; si++) {
+      allStats[si].classList.toggle('active', allStats[si].dataset.dash === dashView);
+      var lbl = allStats[si].querySelector('.stat-lbl');
+      if (lbl) lbl.style.color = allStats[si].dataset.dash === dashView ? 'var(--gold)' : '';
+    }
+    renderDashView();
+    return;
+  }
+  // Progress card click - open that tender
+  var progCard = e.target.closest('.prog-card[data-tid]');
+  if (progCard && progCard.dataset.tid) { openTender(progCard.dataset.tid); return; }
+
   if (e.target.id === 'settings-modal-ok')     { checkSettingsPassword(); return; }
   if (e.target.id === 'settings-modal-cancel') { g('settings-modal').classList.remove('show'); return; }
   if (e.target.id === 'set-pw-btn')            { setNewPassword(); return; }
@@ -1256,7 +1367,7 @@ document.addEventListener('click', function(e) {
   if (e.target.id === 'skip-setup') { showScreen('login'); return; }
   if (e.target.id === 'btn-connect') { connectSheets(); return; }
   if (e.target.id === 'btn-login') { doLogin(); return; }
-  if (e.target.id === 'nav-tasks' || e.target.id === 'tasks-refresh') { showScreen('tasks'); return; }
+  if (e.target.id === 'nav-tasks' || e.target.id === 'tasks-refresh') { dashView = 'tenders'; showScreen('tasks'); return; }
   if (e.target.id === 'nav-list' || e.target.id === 'list-refresh') { showScreen('list'); return; }
   if (e.target.id === 'nav-new') { showScreen('create'); return; }
   if (e.target.id === 'btn-create') { createTender(); return; }

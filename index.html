@@ -965,10 +965,12 @@ function createTender() {
 function openTender(id) {
   currentId = id;
   loading('Loading tender...');
-  // Fire all 3 requests in parallel rather than sequentially
+  // Determine how many parallel requests we need
+  var needUsers = currentUser && currentUser.admin && !allUsers.length;
+  var total = needUsers ? 4 : 3;
   var results = {}, done = 0;
   function onAll() {
-    if (done < 3) return;
+    if (++done < total) return;
     loaded();
     if (!results.tender) {
       if (tenderCache[id]) { showScreen('dashboard'); }
@@ -982,9 +984,10 @@ function openTender(id) {
     assignCache[id]   = results.assigned;
     showScreen('dashboard');
   }
-  api('getTender',      { id: id },         function(td) { done++; if (td && td.ok) results.tender   = td.tender; onAll(); });
-  api('getProgress',    { tenderId: id },    function(pd) { done++; results.progress = (pd && pd.ok) ? pd.steps : {}; onAll(); });
-  api('getAssignments', { tenderId: id },    function(ad) { done++; results.assigned = (ad && ad.ok) ? ad.assigned : []; onAll(); });
+  api('getTender',      { id: id },      function(td) { if (td && td.ok) results.tender   = td.tender; onAll(); });
+  api('getProgress',    { tenderId: id}, function(pd) { results.progress = (pd && pd.ok) ? pd.steps : {}; onAll(); });
+  api('getAssignments', { tenderId: id}, function(ad) { results.assigned = (ad && ad.ok) ? ad.assigned : []; onAll(); });
+  if (needUsers) api('listUsers', {},    function(ud) { if (ud && ud.ok) allUsers = ud.users || []; onAll(); });
 }
 
 // ---- STEP TOGGLE ------------------------------------------------------------
@@ -1295,8 +1298,22 @@ document.addEventListener('click', function(e) {
   var addBtn = e.target.closest('.asgn-btn');
   if (addBtn && addBtn.dataset.addTid) {
     var sel = g('asgn-sel-' + addBtn.dataset.addTid);
-    if (!sel || !sel.value) return;
+    if (!sel) return;
+    // Dropdown only has placeholder - users not loaded yet, reload them
+    if (!sel.value && sel.options.length <= 1) {
+      toast('Loading team members...', 'tinfo');
+      api('listUsers', {}, function(ud) {
+        if (ud && ud.ok) allUsers = ud.users || [];
+        var t2 = tenderCache[currentId];
+        if (t2) renderSidebar(t2, t2._wf || buildWF(t2), progressCache[currentId] || {});
+        toast('Team members loaded - select a person and click Add.', 'tok');
+      });
+      return;
+    }
+    if (!sel.value) { toast('Please select a person to add.', 'tinfo'); return; }
+    loading('Assigning...');
     api('assign', { email: sel.value, tenderId: addBtn.dataset.addTid }, function(res) {
+      loaded();
       if (res && res.ok) {
         api('getAssignments', { tenderId: addBtn.dataset.addTid }, function(ad) {
           if (ad && ad.ok) assignCache[addBtn.dataset.addTid] = ad.assigned || [];
@@ -1304,6 +1321,8 @@ document.addEventListener('click', function(e) {
           if (t3) renderSidebar(t3, t3._wf || buildWF(t3), progressCache[currentId] || {});
           toast('Person assigned!', 'tok');
         });
+      } else {
+        toast('Could not assign - try again.', 'terr');
       }
     }); return;
   }
@@ -1335,20 +1354,19 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ---- INIT -------------------------------------------------------------------
-scriptUrl = ls('cn-url') || '';
-if (scriptUrl) {
-  g('su-url').value = scriptUrl;
-  setConn('checking', 'Connecting...');
-  testConn(scriptUrl, function(ok) {
-    setConn(ok ? 'online' : 'offline', ok ? 'Google Sheets' : 'Offline');
-    var savedEmail = ls('cn-email') || '';
-    if (savedEmail) g('li-email').value = savedEmail;
-    if (!ok) g('login-sub').textContent = 'Google Sheets is offline. Check your connection or click Settings to reconfigure.';
-  });
-} else {
-  setConn('offline', 'Not connected');
-  g('login-sub').textContent = 'Google Sheets not connected yet. Click the link below to set up.';
-}
+// Default Google Apps Script URL - baked in so all computers connect automatically.
+// Can be overridden via Settings if the backend changes.
+var DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz9PZCOscTO5WYzaVeGscqwyOLNDu2al5lqS9E1BwXcfQzUSjLSRe6ICdGzlb_1SQgn/exec';
+
+scriptUrl = ls('cn-url') || DEFAULT_SCRIPT_URL;
+g('su-url').value = scriptUrl;
+setConn('checking', 'Connecting...');
+testConn(scriptUrl, function(ok) {
+  setConn(ok ? 'online' : 'offline', ok ? 'Google Sheets' : 'Offline');
+  var savedEmail = ls('cn-email') || '';
+  if (savedEmail) g('li-email').value = savedEmail;
+  if (!ok) g('login-sub').textContent = 'Google Sheets is offline. Check your connection or click Settings to reconfigure.';
+});
 </script>
 </body>
 </html>

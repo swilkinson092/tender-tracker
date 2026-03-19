@@ -458,7 +458,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--ink);color:var(--fog);min
           <select id="f-type"><option>GC21 (Construction)</option><option>AS4000 (Construction)</option><option>CN Consultancy Agreement (NCC304)</option><option>Design and Construct</option><option>Open Tender - Services</option><option>Other</option></select>
         </div>
         <div class="fg"><label>Contract Value (ex GST)</label><input type="text" id="f-value" placeholder="e.g. $450,000" /></div>
-        <div class="fg"><label>Project Number</label><input type="text" id="f-project" placeholder="e.g. P2024-0087" /></div>
+        <div class="fg"><label>Project Number</label><input type="text" id="f-project" placeholder="PRJ-00000000" maxlength="12" style="font-family:DM Mono,monospace;letter-spacing:.05em;" /></div>
         <div class="fg"><label>Responsible Officer</label><input type="text" id="f-ro" placeholder="Full name" /></div>
         <div class="fg"><label>Procurement Start Date</label><input type="date" id="f-start" /></div>
         <div class="fg"><label>Tender Advertising Date</label><input type="date" id="f-ad" /></div>
@@ -1027,6 +1027,36 @@ function formatCurrency(val) {
   return num.toLocaleString('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function attachProjectFormat(id) {
+  var el = g(id);
+  if (!el) return;
+  var PREFIX = 'PRJ-';
+  // On focus: ensure prefix is always there
+  el.addEventListener('focus', function() {
+    if (!this.value.startsWith(PREFIX)) this.value = PREFIX;
+    // Move cursor to end
+    var val = this.value;
+    this.value = '';
+    this.value = val;
+  });
+  // On input: keep prefix, allow only digits after it, max 8 digits
+  el.addEventListener('input', function() {
+    var val = this.value;
+    if (!val.startsWith(PREFIX)) val = PREFIX;
+    var digits = val.substring(PREFIX.length).replace(/[^0-9]/g, '').substring(0, 8);
+    this.value = PREFIX + digits;
+  });
+  // On blur: pad to 8 digits if incomplete, clear if just prefix
+  el.addEventListener('blur', function() {
+    var val = this.value;
+    if (!val.startsWith(PREFIX) || val === PREFIX) { this.value = ''; return; }
+    var digits = val.substring(PREFIX.length).replace(/[^0-9]/g, '');
+    if (!digits) { this.value = ''; return; }
+    // Pad with leading zeros to 8 digits
+    this.value = PREFIX + digits.padStart(8, '0');
+  });
+}
+
 function attachCurrencyFormat(id) {
   var el = g(id);
   if (!el) return;
@@ -1490,6 +1520,7 @@ document.addEventListener('keydown', function(e) {
 // Can be overridden via Settings if the backend changes.
 var DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz9PZCOscTO5WYzaVeGscqwyOLNDu2al5lqS9E1BwXcfQzUSjLSRe6ICdGzlb_1SQgn/exec';
 attachCurrencyFormat('f-value');
+attachProjectFormat('f-project');
 
 scriptUrl = ls('cn-url') || DEFAULT_SCRIPT_URL;
 g('su-url').value = scriptUrl;

@@ -1018,6 +1018,27 @@ function renderListScreen() {
   el.innerHTML = html;
 }
 
+// ---- CURRENCY FORMATTING ---------------------------------------------------
+function formatCurrency(val) {
+  var raw = String(val).replace(/[^0-9.]/g, '');
+  if (!raw) return '';
+  var num = parseFloat(raw);
+  if (isNaN(num)) return val;
+  return num.toLocaleString('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function attachCurrencyFormat(id) {
+  var el = g(id);
+  if (!el) return;
+  el.addEventListener('blur', function() {
+    var formatted = formatCurrency(this.value);
+    if (formatted) this.value = formatted;
+  });
+  el.addEventListener('focus', function() {
+    this.value = this.value.replace(/[^0-9.]/g, '');
+  });
+}
+
 // ---- CREATE TENDER ----------------------------------------------------------
 function createTender() {
   var name = g('f-name').value.trim();
@@ -1468,6 +1489,7 @@ document.addEventListener('keydown', function(e) {
 // Default Google Apps Script URL - baked in so all computers connect automatically.
 // Can be overridden via Settings if the backend changes.
 var DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz9PZCOscTO5WYzaVeGscqwyOLNDu2al5lqS9E1BwXcfQzUSjLSRe6ICdGzlb_1SQgn/exec';
+attachCurrencyFormat('f-value');
 
 scriptUrl = ls('cn-url') || DEFAULT_SCRIPT_URL;
 g('su-url').value = scriptUrl;

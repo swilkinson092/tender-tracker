@@ -331,17 +331,53 @@ body{font-family:'DM Sans',sans-serif;background:var(--ink);color:var(--fog);min
 .es-sub{font-size:13px;color:var(--slate);line-height:1.6;}
 
 @media(max-width:580px){.form-grid{grid-template-columns:1fr;}.stat-row{grid-template-columns:1fr 1fr;}}
+
+/* MOBILE HEADER */
+.hdr{height:auto;min-height:54px;padding:.5rem 1rem;flex-wrap:wrap;gap:.5rem;}
+.hdr-brand{flex:1;}
+.hdr-right{gap:6px;}
+.mob-menu-btn{display:none;background:transparent;border:1px solid var(--border);color:var(--fog);padding:6px 10px;border-radius:var(--rs);cursor:pointer;font-size:16px;line-height:1;}
+.mob-menu-btn:hover{background:var(--ink2);}
+.mob-nav{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+
+@media(max-width:640px){
+  .hdr{position:relative;}
+  .mob-menu-btn{display:block;}
+  .mob-nav{display:none;width:100%;padding:.5rem 0 .25rem;border-top:1px solid var(--border);order:10;justify-content:flex-start;}
+  .mob-nav.open{display:flex;}
+  .mob-nav .hbtn{font-size:11px;padding:5px 10px;}
+  .mob-nav .user-pill{padding:4px 8px;}
+  .mob-nav .user-pill-name{font-size:11px;}
+  .mob-nav .user-pill-role{font-size:9px;}
+  .mob-nav .conn-pill{font-size:10px;padding:3px 8px;}
+  .mob-nav .admin-pip{font-size:8px;padding:1px 5px;}
+  .hdr-right{justify-content:flex-end;}
+  .page-wrap{padding:1rem .75rem;}
+  .dash-wrap{padding:1rem .75rem;}
+  .stat-row{grid-template-columns:1fr 1fr;}
+  .stat-val{font-size:22px;}
+  .tb-left h2{font-size:16px;}
+  .tb-pct{font-size:28px;}
+  .tender-banner{padding:1rem;}
+  .pipeline{gap:0;}
+  .pip-btn{padding:5px 8px;font-size:10px;}
+  .pip-count{display:none;}
+  .progress-grid{grid-template-columns:1fr;}
+}
 </style>
 </head>
 <body>
 
 <header class="hdr">
-  <div>
+  <div class="hdr-brand">
     <div class="brand-name">Tender Workflow Tracker</div>
     <div class="brand-sub">City of Newcastle - PMO</div>
   </div>
   <div class="hdr-right">
-    <div class="conn-pill"><span class="cdot checking" id="cdot"></span><span id="clbl" style="font-size:10px;">Connecting</span></div>
+    <div class="conn-pill" id="conn-pill-wrap"><span class="cdot checking" id="cdot"></span><span id="clbl" style="font-size:10px;">Connecting</span></div>
+    <button class="mob-menu-btn" id="mob-menu-btn" title="Menu">&#9776;</button>
+  </div>
+  <div class="mob-nav" id="mob-nav">
     <div class="user-pill" id="hdr-user" style="display:none;">
       <div>
         <div class="user-pill-name" id="hdr-uname"></div>
@@ -1390,6 +1426,19 @@ function renderSidebar(t, wf, prog) {
 
 // ---- EVENTS -----------------------------------------------------------------
 document.addEventListener('click', function(e) {
+  // Hamburger menu toggle
+  if (e.target.id === 'mob-menu-btn') {
+    var nav = g('mob-nav');
+    if (nav) nav.classList.toggle('open');
+    return;
+  }
+  // Close menu when any nav button is clicked
+  var navBtn = e.target.closest('#mob-nav .hbtn');
+  if (navBtn) {
+    var nav2 = g('mob-nav');
+    if (nav2) nav2.classList.remove('open');
+  }
+
   // Stat card clicks - switch dashboard view
   var statCard = e.target.closest('.stat[data-dash]');
   if (statCard && statCard.dataset.dash) {

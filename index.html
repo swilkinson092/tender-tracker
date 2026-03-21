@@ -324,6 +324,27 @@ body{font-family:'DM Sans',sans-serif;background:var(--ink);color:var(--fog);min
 .asgn-btn{background:var(--ok);color:var(--white);border:none;padding:6px 12px;border-radius:var(--rs);font-size:11px;cursor:pointer;font-family:DM Mono,monospace;font-weight:500;white-space:nowrap;transition:opacity .2s;}
 .asgn-btn:hover{opacity:.85;}
 
+
+/* STEP EDIT MODE */
+.step-edit-btn{display:none;font-size:9px;background:transparent;color:var(--slate);border:1px solid var(--border);padding:2px 7px;border-radius:var(--rs);cursor:pointer;font-family:DM Mono,monospace;margin-left:auto;flex-shrink:0;transition:all .2s;}
+.step-edit-btn:hover{border-color:var(--gold);color:var(--gold);}
+.superadmin .step-edit-btn{display:block;}
+.step-editing{background:rgba(232,160,32,.05);border-color:var(--gold);}
+.step-edit-form{display:flex;flex-direction:column;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+.step-edit-label{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--slate);font-family:DM Mono,monospace;margin-bottom:2px;}
+.step-edit-input{background:var(--ink);border:1px solid var(--border2);border-radius:var(--rs);padding:6px 9px;font-size:12px;font-family:DM Sans,sans-serif;color:var(--white);outline:none;width:100%;transition:border-color .2s;}
+.step-edit-input:focus{border-color:var(--gold);}
+.step-edit-ta{background:var(--ink);border:1px solid var(--border2);border-radius:var(--rs);padding:6px 9px;font-size:12px;font-family:DM Sans,sans-serif;color:var(--white);outline:none;width:100%;resize:vertical;min-height:80px;line-height:1.6;transition:border-color .2s;}
+.step-edit-ta:focus{border-color:var(--gold);}
+.step-edit-btns{display:flex;gap:6px;justify-content:flex-end;}
+.step-save-btn{background:var(--gold);color:var(--ink);border:none;padding:5px 14px;border-radius:var(--rs);font-size:11px;font-weight:600;cursor:pointer;font-family:DM Sans,sans-serif;transition:opacity .2s;}
+.step-save-btn:hover{opacity:.85;}
+.step-cancel-btn{background:transparent;color:var(--slate);border:1px solid var(--border);padding:5px 12px;border-radius:var(--rs);font-size:11px;cursor:pointer;font-family:DM Sans,sans-serif;transition:all .2s;}
+.step-cancel-btn:hover{border-color:var(--border2);color:var(--fog);}
+.step-reset-btn{background:transparent;color:var(--err);border:1px solid rgba(217,79,79,.3);padding:5px 12px;border-radius:var(--rs);font-size:11px;cursor:pointer;font-family:DM Sans,sans-serif;transition:all .2s;margin-right:auto;}
+.step-reset-btn:hover{background:var(--err-bg);}
+.step-override-tag{font-size:9px;color:var(--gold);font-family:DM Mono,monospace;margin-top:3px;}
+
 /* EMPTY STATES */
 .empty-state{text-align:center;padding:3rem 2rem;}
 .es-icon{font-size:32px;margin-bottom:.75rem;}
@@ -688,6 +709,7 @@ function buildWF(t) {
 
 // ---- STATE ------------------------------------------------------------------
 var scriptUrl = '', currentUser = null, currentId = null;
+var stepOverrides = {};  // stepId -> {title, desc, time}
 var tenderCache = {};    // id -> tender object
 var progressCache = {};  // id -> {stepId: {completedBy, completedDate}}
 var assignCache = {};    // id -> [user, ...]
@@ -719,7 +741,7 @@ function stepsDone(wf, progress) {
 // ---- API --------------------------------------------------------------------
 function api(action, data, cb) {
   if (!scriptUrl) { cb(null, 'No script URL'); return; }
-  var readActions = ['login','listUsers','listMy','listAll','getTender','getProgress','getNote','getAssignments'];
+  var readActions = ['login','listUsers','listMy','listAll','getTender','getProgress','getNote','getAssignments','getStepOverrides'];
   var isRead = readActions.indexOf(action) !== -1;
   var url = scriptUrl + '?action=' + action;
   if (isRead && data) {
@@ -776,6 +798,11 @@ function setUser(user) {
   g('nav-new').style.display    = user.admin ? '' : 'none';
   g('nav-logout').style.display = '';
   if (user.admin) api('listUsers', {}, function(d) { if (d && d.ok) allUsers = d.users || []; });
+  // Load step overrides for everyone (super admin edit buttons only show for superadmin)
+  api('getStepOverrides', {}, function(d) { if (d && d.ok) stepOverrides = d.overrides || {}; });
+  // Add superadmin class to body so CSS shows edit buttons
+  if (user.superadmin) document.body.classList.add('superadmin');
+  else document.body.classList.remove('superadmin');
 }
 
 // ---- SETUP ------------------------------------------------------------------
@@ -1299,14 +1326,23 @@ function renderStep(step, idx, prog, canEdit) {
     step.tags.forEach(function(tg) { tagsHtml += '<span class="stag ' + (tagMap[tg] || '') + '">' + tg + '</span>'; });
     tagsHtml += '</div>';
   }
+  // Apply override if exists
+  var ov = stepOverrides[step.id];
+  var title = (ov && ov.title) ? ov.title : step.title;
+  var desc  = (ov && ov.desc)  ? ov.desc  : step.desc;
+  var time  = (ov && ov.time)  ? ov.time  : step.time;
+  var isOverridden = !!(ov && (ov.title || ov.desc || ov.time));
+
   return '<div class="step ' + cls + '" id="stp-' + step.id + '">' +
     '<div class="step-chk' + (done ? ' done' : '') + '" data-sid="' + step.id + '" data-can="' + (canEdit ? '1' : '0') + '">' + (done ? 'v' : '') + '</div>' +
     '<div class="step-body">' +
-    '<div class="step-n">Step ' + (idx + 1) + '</div>' +
-    '<div class="step-title">' + step.title + '</div>' +
-    '<div class="step-desc">' + step.desc + '</div>' +
+    '<div class="step-n" style="display:flex;align-items:center;">Step ' + (idx + 1) +
+    '<button class="step-edit-btn" data-edit-step="' + step.id + '" title="Edit this step">Edit</button></div>' +
+    '<div class="step-title">' + esc(title) + '</div>' +
+    '<div class="step-desc">' + desc + '</div>' +
     tagsHtml +
-    (step.time ? '<div class="step-time">' + step.time + '</div>' : '') +
+    (time ? '<div class="step-time">' + esc(time) + '</div>' : '') +
+    (isOverridden ? '<div class="step-override-tag">* Customised</div>' : '') +
     (done && info.completedDate ? '<div class="step-done-info">Done ' + fmtDate(info.completedDate) + (info.completedBy ? ' by ' + esc(info.completedBy) : '') + '</div>' : '') +
     (!done && !canEdit ? '<div class="step-lock-note">Assigned to ' + esc(step.role || 'another role') + '</div>' : '') +
     '</div></div>';
@@ -1424,6 +1460,91 @@ function renderSidebar(t, wf, prog) {
   g('refresh-dash').addEventListener('click', function() { if (currentId) openTender(currentId); });
 }
 
+
+// ---- STEP EDITING (super admin only) ----------------------------------------
+function openStepEdit(stepId) {
+  var stepEl = g('stp-' + stepId);
+  if (!stepEl) return;
+  // Get current values (override or default)
+  var ov = stepOverrides[stepId] || {};
+  // Find the default step from workflow
+  var defStep = null;
+  var t = tenderCache[currentId];
+  if (t) {
+    var wf = t._wf || buildWF(t);
+    allSteps(wf).forEach(function(s) { if (s.id === stepId) defStep = s; });
+  }
+  if (!defStep) return;
+  var curTitle = ov.title || defStep.title;
+  var curDesc  = ov.desc  || defStep.desc;
+  var curTime  = ov.time  || defStep.time || '';
+
+  // Mark step as editing
+  stepEl.classList.add('step-editing');
+
+  // Append edit form
+  var form = document.createElement('div');
+  form.className = 'step-edit-form';
+  form.id = 'edit-form-' + stepId;
+  form.innerHTML =
+    '<div><div class="step-edit-label">Step Title</div>' +
+    '<input class="step-edit-input" id="edit-title-' + stepId + '" value="' + esc(curTitle) + '" /></div>' +
+    '<div><div class="step-edit-label">Description</div>' +
+    '<textarea class="step-edit-ta" id="edit-desc-' + stepId + '">' + curDesc + '</textarea></div>' +
+    '<div><div class="step-edit-label">Est. Time</div>' +
+    '<input class="step-edit-input" id="edit-time-' + stepId + '" value="' + esc(curTime) + '" placeholder="e.g. 1-2 days" /></div>' +
+    '<div class="step-edit-btns">' +
+    (ov.title || ov.desc || ov.time ? '<button class="step-reset-btn" data-reset-step="' + stepId + '">Reset to default</button>' : '') +
+    '<button class="step-cancel-btn" data-cancel-edit="' + stepId + '">Cancel</button>' +
+    '<button class="step-save-btn" data-save-step="' + stepId + '">Save</button>' +
+    '</div>';
+  stepEl.appendChild(form);
+  g('edit-title-' + stepId).focus();
+}
+
+function cancelStepEdit(stepId) {
+  var stepEl = g('stp-' + stepId);
+  if (!stepEl) return;
+  stepEl.classList.remove('step-editing');
+  var form = g('edit-form-' + stepId);
+  if (form) form.remove();
+}
+
+function saveStepEdit(stepId) {
+  var titleEl = g('edit-title-' + stepId);
+  var descEl  = g('edit-desc-'  + stepId);
+  var timeEl  = g('edit-time-'  + stepId);
+  if (!titleEl) return;
+  var title = titleEl.value.trim();
+  var desc  = descEl.value.trim();
+  var time  = timeEl.value.trim();
+  if (!title) { toast('Title cannot be empty.', 'terr'); return; }
+  var by = currentUser ? (currentUser.name || currentUser.email) : '';
+  loading('Saving step...');
+  api('saveStepOverride', { stepId: stepId, title: title, desc: desc, time: time, updatedBy: by }, function(res, err) {
+    loaded();
+    if (err || !res || !res.ok) { toast('Could not save. Try again.', 'terr'); return; }
+    // Update local cache
+    stepOverrides[stepId] = { title: title, desc: desc, time: time };
+    cancelStepEdit(stepId);
+    renderDashboard();
+    toast('Step updated!', 'tok');
+  });
+}
+
+function resetStepOverride(stepId) {
+  if (!confirm('Reset this step back to the default text? Your custom text will be lost.')) return;
+  loading('Resetting...');
+  api('deleteStepOverride', { stepId: stepId }, function(res, err) {
+    loaded();
+    if (err || !res || !res.ok) { toast('Could not reset. Try again.', 'terr'); return; }
+    delete stepOverrides[stepId];
+    cancelStepEdit(stepId);
+    renderDashboard();
+    toast('Step reset to default.', 'tok');
+  });
+}
+
 // ---- EVENTS -----------------------------------------------------------------
 document.addEventListener('click', function(e) {
   // Hamburger menu toggle
@@ -1477,6 +1598,16 @@ document.addEventListener('click', function(e) {
     ['nav-tasks','nav-list','nav-new','nav-logout'].forEach(function(id) { g(id).style.display = 'none'; });
     showScreen('login'); return;
   }
+
+  // Step edit buttons (super admin only)
+  var editBtn = e.target.closest('.step-edit-btn');
+  if (editBtn && editBtn.dataset.editStep) { openStepEdit(editBtn.dataset.editStep); return; }
+  var saveBtn = e.target.closest('.step-save-btn');
+  if (saveBtn && saveBtn.dataset.saveStep) { saveStepEdit(saveBtn.dataset.saveStep); return; }
+  var cancelBtn = e.target.closest('.step-cancel-btn');
+  if (cancelBtn && cancelBtn.dataset.cancelEdit) { cancelStepEdit(cancelBtn.dataset.cancelEdit); return; }
+  var resetBtn = e.target.closest('.step-reset-btn');
+  if (resetBtn && resetBtn.dataset.resetStep) { resetStepOverride(resetBtn.dataset.resetStep); return; }
 
   var pip = e.target.closest('.pip-btn');
   if (pip && pip.dataset.stg !== undefined) { t2 = tenderCache[currentId]; if (t2) advanceStage(parseInt(pip.dataset.stg)); return; }

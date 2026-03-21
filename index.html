@@ -582,7 +582,7 @@ function _finishSetPassword(hashed, pw1) {
     pendingUser.password = hashed;
     lsw("cn-pending-user", "");
     lsw("cn-email", pendingUser.email);
-    setConn("online", "Google Sheets");
+    setConn("online", "Online");
     setUser(pendingUser);
     showScreen("tasks");
   });
@@ -786,7 +786,7 @@ function connectSheets() {
   testConn(url, function(ok, r) {
     if (ok) {
       scriptUrl = url; lsw('cn-url', url);
-      setConn('online','Google Sheets');
+      setConn('online','Online');
       setMsg('setup-msg','ok','Connected! You can now sign in.');
       setTimeout(function() { showScreen('login'); }, 600);
     } else {
@@ -825,7 +825,7 @@ function doLogin() {
         return;
       }
       lsw('cn-email', email);
-      setConn('online', 'Google Sheets');
+      setConn('online', 'Online');
       setUser(user);
       showScreen('tasks');
     });
@@ -1575,7 +1575,7 @@ scriptUrl = ls('cn-url') || DEFAULT_SCRIPT_URL;
 g('su-url').value = scriptUrl;
 setConn('checking', 'Connecting...');
 testConn(scriptUrl, function(ok) {
-  setConn(ok ? 'online' : 'offline', ok ? 'Google Sheets' : 'Offline');
+  setConn(ok ? 'online' : 'offline', ok ? 'Online' : 'Offline');
   var savedEmail = ls('cn-email') || '';
   if (savedEmail) g('li-email').value = savedEmail;
   if (!ok) g('login-sub').textContent = 'Google Sheets is offline. Check your connection or click Settings to reconfigure.';
